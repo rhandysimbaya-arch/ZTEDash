@@ -30,7 +30,7 @@ class BandActivity : NeonActivity() {
     override fun build() {
         // 4G
         val c4 = ui.card(col, Neon.CYAN, "4G BANDS (tap to select, then apply)")
-        lte = Ui.Chips(ui, listOf(1, 3, 5, 8, 34, 38, 39, 40, 41).map { "B$it" to "$it" }, true)
+        lte = Ui.Chips(ui, listOf(1, 3, 5, 8, 20, 34, 38, 39, 40, 41).map { "B$it" to "$it" }, true)
         c4.addView(lte.view)
         c4.addView(ui.button("APPLY 4G BANDS", Neon.CYAN) {
             val v = lte.selected.joinToString(",")
@@ -107,7 +107,7 @@ class BandActivity : NeonActivity() {
                 toast("Could not read bands. Log in first (gear icon on the dashboard).")
             } else {
                 val f4 = list(r, "frequency_support_4g")
-                if (f4.isNotEmpty() && f4 != listOf("0")) rebuild4g(f4)
+                if (f4.isNotEmpty() && f4 != listOf("0")) rebuild4g((f4 + "20").distinct().sortedBy { it.toIntOrNull() ?: 999 })
                 val f5 = list(r, "frequency_support_5g")
                 if (f5.isNotEmpty() && f5 != listOf("0")) rebuild5g(f5)
                 lte.set(list(r, "lte_band_lock"))
