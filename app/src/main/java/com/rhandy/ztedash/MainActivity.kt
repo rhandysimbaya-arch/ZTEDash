@@ -40,6 +40,12 @@ class MainActivity : Activity() {
     @Volatile private var pageReady = false
     private val scanBuf = StringBuilder()
     private var lastDevices: List<String> = emptyList()
+    private var pass = ""
+    private var loginTried = false
+    private var loginFailed = false
+    private var perfOn: Boolean? = null
+    private var pollCount = 0
+    private lateinit var perfVal: TextView
     private val ui = Handler(Looper.getMainLooper())
 
     @Volatile private var running = false
@@ -68,6 +74,7 @@ class MainActivity : Activity() {
         window.navigationBarColor = Neon.BG
         prefs = getSharedPreferences("zte", MODE_PRIVATE)
         host = prefs.getString("host", "192.168.0.1")!!
+        pass = prefs.getString("pass", "") ?: ""
         val frame = FrameLayout(this)
         frame.addView(buildUi())
         hidden = buildHidden()
@@ -151,6 +158,8 @@ class MainActivity : Activity() {
                             val j = JSONObject(text)
                             val li = j.optString("loginfo") == "ok" || j.optString("network_type").isNotEmpty()
                             render(ZteApi.Snap(j, lastDevices, li))
+                            if (!li && pass.isNotEmpty() && !loginTried) doLogin()
+                            if (li) { pollCount++; if (pollCount % 5 == 1) perfPoll() }
                         }
                         "dev" -> {
                             val j = JSONObject(text)
@@ -169,6 +178,23 @@ class MainActivity : Activity() {
                                 devicesVal.text = out.size.toString()
                                 deviceList.text = out.joinToString("\n")
                             }
+                        }
+                        "login" -> {
+                            loginFailed = !JSONObject(text).optBoolean("result", false)
+                        }
+                        "perf" -> {
+                            val v = JSONObject(text).optString("performance_mode", "")
+                            if (v == "1" || v == "0") {
+                                perfOn = v == "1"
+                                perfVal.text = if (v == "1") "ON" else "OFF"
+                            }
+                        }
+                        "perf_set" -> {
+                            val r = JSONObject(text).optString("result", "")
+                            Toast.makeText(this@MainActivity,
+                                if (r == "success") "Performance mode updated" else "Performance mode change failed ($r)",
+                                Toast.LENGTH_LONG).show()
+                            perfPoll()
                         }
                         else -> showOffline(text)
                     }
@@ -197,7 +223,9 @@ class MainActivity : Activity() {
         statusDot.background = dot(color)
         statusText.setTextColor(color)
         statusText.text = when {
-            !s.loggedIn -> "NOT LOGGED IN · TAP HERE TO LOG IN"
+            !s.loggedIn && loginFailed -> "LOGIN FAILED · CHECK PASSWORD IN ⚙"
+            !s.loggedIn && pass.isNotEmpty() && !loginTried -> "LOGGING IN…"
+            !s.loggedIn -> "NOT LOGGED IN · ADD PASSWORD IN ⚙ OR TAP HERE"
             online -> "ONLINE"
             else -> "NO INTERNET"
         }
@@ -372,8 +400,10 @@ class MainActivity : Activity() {
         // stat tiles
         val (t1, v1) = tile("DEVICES", Neon.CYAN); devicesVal = v1
         val (t2, v2) = tile("PERFORMANCE MODE", Neon.LIME)
-        v2.text = "OPEN ›"
-        t2.setOnClickListener { openRoute("performance_mode") }
+        perfVal = v2
+        v2.text = "--"
+        t2.setOnClickListener { togglePerf() }
+        t2.setOnLongClickListener { openRoute("performance_mode"); true }
         root.addView(row(t1, t2))
         val (tS, vS) = tile("ADVANCED SETTINGS", Neon.CYAN)
         vS.text = "OPEN ›"
@@ -449,6 +479,30 @@ class MainActivity : Activity() {
         hidden.evaluateJavascript(SCAN_JS, null)
     }
 
+    private fun doLogin() {
+        loginTried = true
+        val js = "require(['service'],function(s){s.login({password:" + JSONObject.quote(pass) +
+            "},function(r){Bridge.onData('login',JSON.stringify(r));});});"
+        hidden.evaluateJavascript(js, null)
+    }
+
+    private fun perfPoll() {
+        hidden.evaluateJavascript(
+            "require(['service'],function(s){s.getPerformanceMode({},function(r){Bridge.onData('perf',JSON.stringify(r));});});", null)
+    }
+
+    private fun togglePerf() {
+        val cur = perfOn
+        if (cur == null) {
+            Toast.makeText(this, "Log in first (gear icon, password). Long-press opens the router page.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val want = if (cur) "0" else "1"
+        hidden.evaluateJavascript(
+            "require(['service'],function(s){s.setPerformanceMode({performance_mode:'" + want +
+                "'},function(r){Bridge.onData('perf_set',JSON.stringify(r));});});", null)
+    }
+
     private fun openRoute(route: String) {
         startActivity(android.content.Intent(this, WebActivity::class.java).putExtra("route", route))
     }
@@ -460,6 +514,11 @@ class MainActivity : Activity() {
         }
         val ip = EditText(this).apply { setText(host); hint = "Router IP (192.168.0.1)"; inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(ip)
+        val pw = EditText(this).apply {
+            setText(pass); hint = "Router admin password"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        box.addView(pw)
         val rb = EditText(this).apply {
             setText(prefs.getString("route_band", "network_debug")); hint = "Band selection page (after #)"
             inputType = InputType.TYPE_CLASS_TEXT
@@ -475,7 +534,10 @@ class MainActivity : Activity() {
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
                 host = ip.text.toString().trim().ifEmpty { "192.168.0.1" }
-                prefs.edit().putString("host", host)
+                pass = pw.text.toString()
+                loginTried = false
+                loginFailed = false
+                prefs.edit().putString("host", host).putString("pass", pass)
                     .putString("route_band", rb.text.toString().trim().removePrefix("#"))
                     .putString("route_settings", rs.text.toString().trim().removePrefix("#")).apply()
                 pageReady = false
@@ -498,6 +560,7 @@ class MainActivity : Activity() {
   else if(e===''){c.push('js/'+u+'.js');}
   return c;}
  var idx=await get('/index.html');send('/index.html',idx||'[none]');
+ queue.push('config/ufi/MU5002/menu.js','config/ufi/MU5002/config.js','config/ufi/MU5002/menu_dhcp.js');
  var m,re=/(?:src|href|data-main)=["']([^"'?]+)/gi;
  while((m=re.exec(idx||''))){var u=m[1];
   if(u.charAt(0)==='#'||u.indexOf('javascript')===0||u.indexOf('http')===0)continue;
@@ -519,6 +582,8 @@ class MainActivity : Activity() {
   if(ext(gp)==='js'){
    var d,dr=/(?:define|require)\s*\(\s*\[([^\]]*)\]/g;
    while((d=dr.exec(got))){var q,qr=/["']([^"']+)["']/g;while((q=qr.exec(d[1]))){queue.push(q[1]);}}
+   var pm,pr=/path:\s*["']([\w\-\/]+)["']/g;
+   while((pm=pr.exec(got))){queue.push(pm[1]);queue.push('tmpl/'+pm[1]+'.html');}
    var s2,sr=/["']([\w\-\.\/!]+\.(?:html|htm|json|js))["']/g;
    while((s2=sr.exec(got))){queue.push(s2[1]);}
   }

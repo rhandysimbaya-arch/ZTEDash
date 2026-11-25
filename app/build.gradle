@@ -11,12 +11,26 @@ android {
         applicationId "com.rhandy.ztedash"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+        versionName "1." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // Fixed signing key so every build installs as an update over the previous one.
+    signingConfigs {
+        shared {
+            storeFile file('ztedash.jks')
+            storePassword 'ztedash123'
+            keyAlias 'ztedash'
+            keyPassword 'ztedash123'
+        }
     }
 
     buildTypes {
-        release { minifyEnabled false }
+        debug { signingConfig signingConfigs.shared }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
