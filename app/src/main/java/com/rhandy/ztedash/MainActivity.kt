@@ -349,10 +349,15 @@ class MainActivity : Activity() {
         val (t1, v1) = tile("DEVICES", Neon.CYAN); devicesVal = v1
         val (t2, v2) = tile("PERFORMANCE MODE", Neon.LIME)
         v2.text = "OPEN ›"
-        t2.setOnClickListener {
-            startActivity(android.content.Intent(this, WebActivity::class.java).putExtra("route", "performance_mode"))
-        }
+        t2.setOnClickListener { openRoute("performance_mode") }
         root.addView(row(t1, t2))
+        val (tS, vS) = tile("ADVANCED SETTINGS", Neon.CYAN)
+        vS.text = "OPEN ›"
+        tS.setOnClickListener { openRoute(prefs.getString("route_settings", "") ?: "") }
+        val (tB, vB) = tile("BAND SELECTION", Neon.MAGENTA)
+        vB.text = "OPEN ›"
+        tB.setOnClickListener { openRoute(prefs.getString("route_band", "band_selection") ?: "") }
+        root.addView(row(tS, tB))
         val (t3, v3) = tile("DATA THIS MONTH", Neon.MAGENTA); dataVal = v3
         val (t4, v4) = tile("UPTIME", 0xFFB77CFF.toInt()); uptimeVal = v4
         root.addView(row(t3, t4))
@@ -379,6 +384,10 @@ class MainActivity : Activity() {
         return scroll
     }
 
+    private fun openRoute(route: String) {
+        startActivity(android.content.Intent(this, WebActivity::class.java).putExtra("route", route))
+    }
+
     private fun showSettings() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -386,12 +395,24 @@ class MainActivity : Activity() {
         }
         val ip = EditText(this).apply { setText(host); hint = "Router IP (192.168.0.1)"; inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(ip)
+        val rb = EditText(this).apply {
+            setText(prefs.getString("route_band", "band_selection")); hint = "Band selection page (after #)"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val rs = EditText(this).apply {
+            setText(prefs.getString("route_settings", "")); hint = "Settings page (after #, blank = home)"
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        box.addView(rb)
+        box.addView(rs)
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Router address")
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
                 host = ip.text.toString().trim().ifEmpty { "192.168.0.1" }
-                prefs.edit().putString("host", host).apply()
+                prefs.edit().putString("host", host)
+                    .putString("route_band", rb.text.toString().trim().removePrefix("#"))
+                    .putString("route_settings", rs.text.toString().trim().removePrefix("#")).apply()
                 pageReady = false
                 hidden.loadUrl("http://$host/index.html")
             }
