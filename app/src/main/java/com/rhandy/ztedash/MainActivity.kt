@@ -356,7 +356,7 @@ class MainActivity : Activity() {
         tS.setOnClickListener { openRoute(prefs.getString("route_settings", "") ?: "") }
         val (tB, vB) = tile("BAND SELECTION", Neon.MAGENTA)
         vB.text = "OPEN ›"
-        tB.setOnClickListener { openRoute(prefs.getString("route_band", "band_selection") ?: "") }
+        tB.setOnClickListener { openRoute(prefs.getString("route_band", "network_debug") ?: "") }
         root.addView(row(tS, tB))
         val (t3, v3) = tile("DATA THIS MONTH", Neon.MAGENTA); dataVal = v3
         val (t4, v4) = tile("UPTIME", 0xFFB77CFF.toInt()); uptimeVal = v4
@@ -396,7 +396,7 @@ class MainActivity : Activity() {
         val ip = EditText(this).apply { setText(host); hint = "Router IP (192.168.0.1)"; inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(ip)
         val rb = EditText(this).apply {
-            setText(prefs.getString("route_band", "band_selection")); hint = "Band selection page (after #)"
+            setText(prefs.getString("route_band", "network_debug")); hint = "Band selection page (after #)"
             inputType = InputType.TYPE_CLASS_TEXT
         }
         val rs = EditText(this).apply {
