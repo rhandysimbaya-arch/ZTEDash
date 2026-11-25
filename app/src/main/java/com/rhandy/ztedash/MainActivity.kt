@@ -13,7 +13,13 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.annotation.SuppressLint
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.FrameLayout
+import org.json.JSONObject
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -22,11 +28,13 @@ import java.util.Locale
 class MainActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var api: ZteApi
+    private var host = "192.168.0.1"
+    private lateinit var hidden: WebView
+    @Volatile private var pageReady = false
+    private var lastDevices: List<String> = emptyList()
     private val ui = Handler(Looper.getMainLooper())
 
     @Volatile private var running = false
-    @Volatile private var generation = 0
 
     private lateinit var statusDot: View
     private lateinit var statusText: TextView
@@ -51,8 +59,12 @@ class MainActivity : Activity() {
         window.statusBarColor = Neon.BG
         window.navigationBarColor = Neon.BG
         prefs = getSharedPreferences("zte", MODE_PRIVATE)
-        api = ZteApi(prefs.getString("host", "192.168.0.1")!!, prefs.getString("pass", "")!!)
-        setContentView(buildUi())
+        host = prefs.getString("host", "192.168.0.1")!!
+        val frame = FrameLayout(this)
+        frame.addView(buildUi())
+        hidden = buildHidden()
+        frame.addView(hidden, FrameLayout.LayoutParams(1, 1))
+        setContentView(frame)
     }
 
     override fun onResume() {
@@ -63,26 +75,84 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         running = false
+        ui.removeCallbacks(tick)
     }
 
     // ---------- polling ----------
 
+    private val tick = object : Runnable {
+        override fun run() {
+            if (!running) return
+            poll()
+            ui.postDelayed(this, 2000)
+        }
+    }
+
     private fun startPolling() {
         if (running) return
         running = true
-        val gen = ++generation
-        Thread {
-            while (running && gen == generation) {
+        if (!pageReady) hidden.loadUrl("http://$host/index.html")
+        ui.postDelayed(tick, 800)
+    }
+
+    /** Hidden WebView on the router's own origin: same cookies/headers as the stock page. */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun buildHidden(): WebView = WebView(this).apply {
+        alpha = 0f
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        addJavascriptInterface(Bridge(), "Bridge")
+        webViewClient = object : WebViewClient() {
+            override fun onPageFinished(v: WebView, url: String) { pageReady = true }
+        }
+    }
+
+    private fun poll() {
+        if (!pageReady) return
+        val js = "(function(){function g(c,t){var u='/goform/goform_get_cmd_process?isTest=false&cmd='+" +
+            "encodeURIComponent(c)+'&multi_data=1&_='+Date.now();" +
+            "fetch(u,{credentials:'include'}).then(function(r){return r.text()})" +
+            ".then(function(x){Bridge.onData(t,x)}).catch(function(e){Bridge.onData(t+'_err',String(e))});}" +
+            "g('" + ZteApi.MAIN + "','main');g('station_list,lan_station_list','dev');})();"
+        hidden.evaluateJavascript(js, null)
+    }
+
+    inner class Bridge {
+        @JavascriptInterface
+        fun onData(tag: String, text: String) {
+            ui.post {
                 try {
-                    val snap = api.fetch()
-                    ui.post { render(snap) }
+                    when (tag) {
+                        "main" -> {
+                            val j = JSONObject(text)
+                            val li = j.optString("loginfo") == "ok" || j.optString("network_type").isNotEmpty()
+                            render(ZteApi.Snap(j, lastDevices, li))
+                        }
+                        "dev" -> {
+                            val j = JSONObject(text)
+                            val out = ArrayList<String>()
+                            for (key in arrayOf("station_list", "lan_station_list")) {
+                                val arr = j.optJSONArray(key) ?: continue
+                                for (k in 0 until arr.length()) {
+                                    val o = arr.optJSONObject(k) ?: continue
+                                    val name = o.optString("hostname").ifEmpty { o.optString("mac_addr") }
+                                    val ip = o.optString("ip_addr")
+                                    out.add(if (ip.isNotEmpty()) "$name  ·  $ip" else name)
+                                }
+                            }
+                            lastDevices = out
+                            if (out.isNotEmpty()) {
+                                devicesVal.text = out.size.toString()
+                                deviceList.text = out.joinToString("\n")
+                            }
+                        }
+                        else -> showOffline(text)
+                    }
                 } catch (e: Exception) {
-                    val msg = e.message ?: e.javaClass.simpleName
-                    ui.post { showOffline(msg) }
+                    showOffline("Unexpected reply (log in via the router page)")
                 }
-                try { Thread.sleep(2000) } catch (_: InterruptedException) { }
             }
-        }.also { it.isDaemon = true; it.start() }
+        }
     }
 
     private fun showOffline(msg: String) {
@@ -314,22 +384,16 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(10), dp(20), 0)
         }
-        val ip = EditText(this).apply { setText(api.host); hint = "Router IP (192.168.0.1)"; inputType = InputType.TYPE_CLASS_TEXT }
-        val pw = EditText(this).apply {
-            setText(api.password); hint = "Admin password"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
+        val ip = EditText(this).apply { setText(host); hint = "Router IP (192.168.0.1)"; inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(ip)
-        box.addView(pw)
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Router settings")
+            .setTitle("Router address")
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
-                val h = ip.text.toString().trim().ifEmpty { "192.168.0.1" }
-                val p = pw.text.toString()
-                prefs.edit().putString("host", h).putString("pass", p).apply()
-                api.host = h
-                api.password = p
+                host = ip.text.toString().trim().ifEmpty { "192.168.0.1" }
+                prefs.edit().putString("host", host).apply()
+                pageReady = false
+                hidden.loadUrl("http://$host/index.html")
             }
             .setNegativeButton("Cancel", null)
             .show()
