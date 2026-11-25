@@ -488,19 +488,40 @@ class MainActivity : Activity() {
     companion object {
         private const val SCAN_JS = """
 (async function(){
- var count=0, seen={}, queue=[];
- var skip=/jquery|echarts|bootstrap|angular|lodash|polyfill|chart|moment|qrcode|zepto/i;
- async function get(u){try{var r=await fetch(u,{credentials:'include'});var t=await r.text();return t.length>2500000?t.slice(0,2500000)+'\n[TRUNCATED]':t;}catch(e){return null;}}
- function send(n,t){Bridge.scanChunk('\n\n===== '+n+' =====\n'+t);}
- function norm(u){try{return new URL(u,location.origin+'/index.html').pathname;}catch(e){return null;}}
+ var count=0,total=0,seen={},queue=[];
+ var skip=/jquery|echarts|bootstrap|angular|lodash|polyfill|chart|moment|qrcode|zepto|require|chosen|knockout|html5shiv|respond|underscore|\/lang\/|\/i18n\//i;
+ function ext(u){var i=u.lastIndexOf('.');return i<0?'':u.slice(i+1).toLowerCase();}
+ async function get(u){try{var r=await fetch(u,{credentials:'include'});if(!r.ok)return null;var t=await r.text();if(t.length>2500000)t=t.slice(0,2500000)+'\n[TRUNCATED]';return t;}catch(e){return null;}}
+ function send(n,t){total+=t.length;Bridge.scanChunk('\n\n===== '+n+' =====\n'+t);}
+ function cands(u){u=u.split('?')[0];if(u.indexOf('text!')===0)u=u.slice(5);var e=ext(u),c=[];
+  if(e==='js'||e==='html'||e==='htm'||e==='json'){c.push(u);if(u.indexOf('js/')!==0)c.push('js/'+u);}
+  else if(e===''){c.push('js/'+u+'.js');}
+  return c;}
  var idx=await get('/index.html');send('/index.html',idx||'[none]');
- var m,re=/(?:src|href)=["']([^"']+\.(?:js|css|html))["']/gi;
- while((m=re.exec(idx||''))){queue.push(m[1]);}
- while(queue.length&&count<400){
-  var p=norm(queue.shift()); if(!p||seen[p])continue; seen[p]=1; count++;
-  if(skip.test(p)){send(p,'[skipped vendor file]');continue;}
-  var t=await get(p); if(t===null){send(p,'[fetch failed]');continue;} send(p,t);
-  if(p.slice(-3)==='.js'){var r2=/["'`]([\w\-\/\.]+\.html?)["'`]/g,k;while((k=r2.exec(t))){queue.push(k[1]);}}
+ var m,re=/(?:src|href|data-main)=["']([^"'?]+)/gi;
+ while((m=re.exec(idx||''))){var u=m[1];
+  if(u.charAt(0)==='#'||u.indexOf('javascript')===0||u.indexOf('http')===0)continue;
+  var x=ext(u);if(x==='css'||x==='png'||x==='gif'||x==='ico'||x==='jpg')continue;
+  queue.push(x===''?u+'.js':u);}
+ while(queue.length&&count<500&&total<8000000){
+  var cs=cands(queue.shift()),got=null,gp=null;
+  for(var i=0;i<cs.length;i++){
+   var p=new URL(cs[i],location.origin+'/index.html').pathname;
+   if(seen[p]){gp='dup';break;}
+   if(skip.test(p)){seen[p]=1;count++;send(p,'[skipped vendor/lang file]');gp='dup';break;}
+   var t=await get(p);
+   if(t===null)continue;
+   if(ext(p)==='js'&&t.trim().charAt(0)==='<')continue;
+   if(t.indexOf('id="topContainer"')>=0)continue;
+   got=t;gp=p;break;}
+  if(gp==='dup'||got===null)continue;
+  seen[gp]=1;count++;send(gp,got);
+  if(ext(gp)==='js'){
+   var d,dr=/(?:define|require)\s*\(\s*\[([^\]]*)\]/g;
+   while((d=dr.exec(got))){var q,qr=/["']([^"']+)["']/g;while((q=qr.exec(d[1]))){queue.push(q[1]);}}
+   var s2,sr=/["']([\w\-\.\/!]+\.(?:html|htm|json|js))["']/g;
+   while((s2=sr.exec(got))){queue.push(s2[1]);}
+  }
  }
  Bridge.scanDone(String(count));
 })();
