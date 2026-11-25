@@ -36,8 +36,7 @@ class MainActivity : Activity() {
     private lateinit var upText: TextView
     private lateinit var spark: SparkView
     private lateinit var devicesVal: TextView
-    private lateinit var batteryVal: TextView
-    private lateinit var dataVal: TextView
+        private lateinit var dataVal: TextView
     private lateinit var uptimeVal: TextView
     private lateinit var sinrVal: TextView
     private lateinit var rsrqVal: TextView
@@ -140,9 +139,6 @@ class MainActivity : Activity() {
         else (first("wifi_access_sta_num", "sta_count").toIntOrNull() ?: 0)
         devicesVal.text = devCount.toString()
         deviceList.text = if (s.devices.isEmpty()) "No device details" else s.devices.joinToString("\n")
-
-        val bat = first("battery_vol_percent", "battery_value", "battery_pers").filter { it.isDigit() }
-        batteryVal.text = if (bat.isEmpty()) "--" else bat + "%" + if (g("battery_charging") == "1") " ⚡" else ""
 
         val used = (g("monthly_rx_bytes").toDoubleOrNull() ?: 0.0) + (g("monthly_tx_bytes").toDoubleOrNull() ?: 0.0)
         dataVal.text = bytes(used)
@@ -277,7 +273,11 @@ class MainActivity : Activity() {
 
         // stat tiles
         val (t1, v1) = tile("DEVICES", Neon.CYAN); devicesVal = v1
-        val (t2, v2) = tile("BATTERY", Neon.LIME); batteryVal = v2
+        val (t2, v2) = tile("PERFORMANCE MODE", Neon.LIME)
+        v2.text = "OPEN ›"
+        t2.setOnClickListener {
+            startActivity(android.content.Intent(this, WebActivity::class.java).putExtra("route", "performance_mode"))
+        }
         root.addView(row(t1, t2))
         val (t3, v3) = tile("DATA THIS MONTH", Neon.MAGENTA); dataVal = v3
         val (t4, v4) = tile("UPTIME", 0xFFB77CFF.toInt()); uptimeVal = v4
