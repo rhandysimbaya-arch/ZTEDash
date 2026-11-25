@@ -14,6 +14,13 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.annotation.SuppressLint
+import android.content.ContentValues
+import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
+import java.io.File
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -31,6 +38,7 @@ class MainActivity : Activity() {
     private var host = "192.168.0.1"
     private lateinit var hidden: WebView
     @Volatile private var pageReady = false
+    private val scanBuf = StringBuilder()
     private var lastDevices: List<String> = emptyList()
     private val ui = Handler(Looper.getMainLooper())
 
@@ -118,6 +126,22 @@ class MainActivity : Activity() {
     }
 
     inner class Bridge {
+        @JavascriptInterface
+        fun scanChunk(t: String) { synchronized(scanBuf) { scanBuf.append(t) } }
+
+        @JavascriptInterface
+        fun scanDone(count: String) {
+            val text = synchronized(scanBuf) { val x = scanBuf.toString(); scanBuf.setLength(0); x }
+            Thread {
+                try {
+                    val where = saveScan("ZTE router scan - $count files\n" + text)
+                    ui.post { Toast.makeText(this@MainActivity, "Saved: $where", Toast.LENGTH_LONG).show() }
+                } catch (e: Exception) {
+                    ui.post { Toast.makeText(this@MainActivity, "Save failed: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
         @JavascriptInterface
         fun onData(tag: String, text: String) {
             ui.post {
@@ -376,12 +400,53 @@ class MainActivity : Activity() {
         dev.addView(deviceList)
         root.addView(dev)
 
+        val scan = card(Neon.LIME)
+        scan.addView(text("SCAN ROUTER", 14f, Neon.LIME, true, 0.15f))
+        scan.addView(text("Collect the router's pages and scripts into one file to share", 11f, Neon.DIM))
+        scan.setOnClickListener { startScan() }
+        root.addView(scan)
+
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Neon.BG)
             isVerticalScrollBarEnabled = false
             addView(root)
         }
         return scroll
+    }
+
+    private fun saveScan(text: String): String {
+        val name = "zte_router_scan.txt"
+        if (Build.VERSION.SDK_INT >= 29) {
+            val cv = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)!!
+            contentResolver.openOutputStream(uri)!!.use { it.write(text.toByteArray()) }
+            ui.post {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(send, "Send router scan"))
+            }
+            return "Downloads/$name"
+        }
+        val f = File(getExternalFilesDir(null), name)
+        f.writeText(text)
+        return f.absolutePath
+    }
+
+    private fun startScan() {
+        if (!pageReady) {
+            Toast.makeText(this, "Router page not ready - connect to the F50 Wi-Fi and log in first", Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, "Scanning router… this takes a few seconds", Toast.LENGTH_LONG).show()
+        synchronized(scanBuf) { scanBuf.setLength(0) }
+        hidden.evaluateJavascript(SCAN_JS, null)
     }
 
     private fun openRoute(route: String) {
@@ -418,5 +483,27 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    companion object {
+        private const val SCAN_JS = """
+(async function(){
+ var count=0, seen={}, queue=[];
+ var skip=/jquery|echarts|bootstrap|angular|lodash|polyfill|chart|moment|qrcode|zepto/i;
+ async function get(u){try{var r=await fetch(u,{credentials:'include'});var t=await r.text();return t.length>2500000?t.slice(0,2500000)+'\n[TRUNCATED]':t;}catch(e){return null;}}
+ function send(n,t){Bridge.scanChunk('\n\n===== '+n+' =====\n'+t);}
+ function norm(u){try{return new URL(u,location.origin+'/index.html').pathname;}catch(e){return null;}}
+ var idx=await get('/index.html');send('/index.html',idx||'[none]');
+ var m,re=/(?:src|href)=["']([^"']+\.(?:js|css|html))["']/gi;
+ while((m=re.exec(idx||''))){queue.push(m[1]);}
+ while(queue.length&&count<400){
+  var p=norm(queue.shift()); if(!p||seen[p])continue; seen[p]=1; count++;
+  if(skip.test(p)){send(p,'[skipped vendor file]');continue;}
+  var t=await get(p); if(t===null){send(p,'[fetch failed]');continue;} send(p,t);
+  if(p.slice(-3)==='.js'){var r2=/["'`]([\w\-\/\.]+\.html?)["'`]/g,k;while((k=r2.exec(t))){queue.push(k[1]);}}
+ }
+ Bridge.scanDone(String(count));
+})();
+"""
     }
 }
