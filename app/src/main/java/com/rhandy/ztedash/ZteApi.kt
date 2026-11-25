@@ -25,7 +25,9 @@ class ZteApi(var host: String, password: String) {
             c.readTimeout = 4000
             c.setRequestProperty("Referer", "http://$host/index.html")
             c.setRequestProperty("Accept", "application/json, text/javascript, */*; q=0.01")
-            if (cookie.isNotEmpty()) c.setRequestProperty("Cookie", cookie)
+            val ck = if (cookie.isNotEmpty()) cookie else
+                (try { android.webkit.CookieManager.getInstance().getCookie("http://$host") } catch (e: Exception) { null } ?: "")
+            if (ck.isNotEmpty()) c.setRequestProperty("Cookie", ck)
             if (post != null) {
                 c.requestMethod = "POST"
                 c.doOutput = true

@@ -23,6 +23,7 @@ class WebActivity : Activity() {
         val host = getSharedPreferences("zte", MODE_PRIVATE).getString("host", "192.168.0.1")!!
         val route = intent.getStringExtra("route") ?: "performance_mode"
 
+        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
         val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         web = WebView(this).apply {
             setBackgroundColor(Neon.BG)
@@ -46,6 +47,11 @@ class WebActivity : Activity() {
         root.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 8))
         setContentView(root)
         web.loadUrl("http://$host/index.html#$route")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        android.webkit.CookieManager.getInstance().flush()
     }
 
     @Deprecated("Deprecated in Java")

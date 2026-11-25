@@ -103,10 +103,11 @@ class MainActivity : Activity() {
         statusDot.background = dot(color)
         statusText.setTextColor(color)
         statusText.text = when {
-            api.loginFailed -> "LOGIN FAILED · check password"
+            !s.loggedIn -> "NOT LOGGED IN · TAP HERE TO LOG IN"
             online -> "ONLINE"
             else -> "NO INTERNET"
         }
+        if (!s.loggedIn) statusText.setTextColor(Neon.MAGENTA)
 
         val nt = g("network_type").uppercase().ifEmpty { "--" }
         val z5 = g("Z5g_rsrp").toFloatOrNull()
@@ -235,6 +236,9 @@ class MainActivity : Activity() {
         statusDot = View(this).apply { background = dot(Neon.DIM) }
         sub.addView(statusDot, LinearLayout.LayoutParams(dp(9), dp(9)).apply { rightMargin = dp(7) })
         statusText = text("CONNECTING…", 11f, Neon.DIM, false, 0.12f)
+        statusText.setOnClickListener {
+            startActivity(android.content.Intent(this, WebActivity::class.java).putExtra("route", ""))
+        }
         sub.addView(statusText)
         titles.addView(sub)
         head.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
