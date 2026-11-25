@@ -405,13 +405,20 @@ class MainActivity : Activity() {
         t2.setOnClickListener { togglePerf() }
         t2.setOnLongClickListener { openRoute("performance_mode"); true }
         root.addView(row(t1, t2))
-        val (tS, vS) = tile("ADVANCED SETTINGS", Neon.CYAN)
+        val (tS, vS) = tile("ALL SETTINGS", Neon.CYAN)
         vS.text = "OPEN ›"
-        tS.setOnClickListener { openRoute(prefs.getString("route_settings", "") ?: "") }
+        tS.setOnClickListener { startActivity(android.content.Intent(this, MenuActivity::class.java)) }
         val (tB, vB) = tile("BAND SELECTION", Neon.MAGENTA)
         vB.text = "OPEN ›"
-        tB.setOnClickListener { openRoute(prefs.getString("route_band", "network_debug") ?: "") }
+        tB.setOnClickListener { startActivity(android.content.Intent(this, BandActivity::class.java)) }
         root.addView(row(tS, tB))
+        val (tN, vN) = tile("NETWORK MODE", Neon.LIME)
+        vN.text = "OPEN ›"
+        tN.setOnClickListener { startActivity(android.content.Intent(this, NetModeActivity::class.java)) }
+        val (tD, vD) = tile("DEVICE CONTROLS", Neon.PURPLE.let { 0xFFB77CFF.toInt() })
+        vD.text = "OPEN ›"
+        tD.setOnClickListener { startActivity(android.content.Intent(this, DeviceActivity::class.java)) }
+        root.addView(row(tN, tD))
         val (t3, v3) = tile("DATA THIS MONTH", Neon.MAGENTA); dataVal = v3
         val (t4, v4) = tile("UPTIME", 0xFFB77CFF.toInt()); uptimeVal = v4
         root.addView(row(t3, t4))
@@ -498,9 +505,16 @@ class MainActivity : Activity() {
             return
         }
         val want = if (cur) "0" else "1"
-        hidden.evaluateJavascript(
-            "require(['service'],function(s){s.setPerformanceMode({performance_mode:'" + want +
-                "'},function(r){Bridge.onData('perf_set',JSON.stringify(r));});});", null)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setMessage((if (cur) "Turn Performance Mode OFF" else "Turn Performance Mode ON") + "? The router will restart.")
+            .setPositiveButton("Yes") { _, _ ->
+                hidden.evaluateJavascript(
+                    "require(['service'],function(s){s.setPerformanceMode({performance_mode:'" + want +
+                        "'},function(r){if(r&&r.result==='success'){s.restart({},function(){});}" +
+                        "Bridge.onData('perf_set',JSON.stringify(r));});});", null)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun openRoute(route: String) {
@@ -519,16 +533,6 @@ class MainActivity : Activity() {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         box.addView(pw)
-        val rb = EditText(this).apply {
-            setText(prefs.getString("route_band", "network_debug")); hint = "Band selection page (after #)"
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        val rs = EditText(this).apply {
-            setText(prefs.getString("route_settings", "")); hint = "Settings page (after #, blank = home)"
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        box.addView(rb)
-        box.addView(rs)
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Router address")
             .setView(box)
@@ -538,8 +542,7 @@ class MainActivity : Activity() {
                 loginTried = false
                 loginFailed = false
                 prefs.edit().putString("host", host).putString("pass", pass)
-                    .putString("route_band", rb.text.toString().trim().removePrefix("#"))
-                    .putString("route_settings", rs.text.toString().trim().removePrefix("#")).apply()
+                    .apply()
                 pageReady = false
                 hidden.loadUrl("http://$host/index.html")
             }

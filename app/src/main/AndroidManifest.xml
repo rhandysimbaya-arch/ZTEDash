@@ -20,5 +20,9 @@
             </intent-filter>
         </activity>
         <activity android:name=".WebActivity" android:exported="false" />
+        <activity android:name=".MenuActivity" android:exported="false" />
+        <activity android:name=".BandActivity" android:exported="false" />
+        <activity android:name=".NetModeActivity" android:exported="false" />
+        <activity android:name=".DeviceActivity" android:exported="false" />
     </application>
 </manifest>
