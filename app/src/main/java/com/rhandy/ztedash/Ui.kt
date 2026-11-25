@@ -74,6 +74,23 @@ class Ui(val ctx: Context) {
         setOnClickListener { onClick() }
     }
 
+    fun field(hint: String, value: String = "", numeric: Boolean = false): android.widget.EditText =
+        android.widget.EditText(ctx).apply {
+            this.hint = hint
+            setText(value)
+            setHintTextColor(Neon.DIM)
+            setTextColor(Neon.WHITE)
+            inputType = if (numeric) android.text.InputType.TYPE_CLASS_NUMBER
+            else android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            background = bg(Neon.BG, Neon.PURPLE, 10)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+
+    fun label(t: String) = text(t, 10f, Neon.DIM).apply {
+        letterSpacing = 0.2f
+        setPadding(0, dp(10), 0, dp(2))
+    }
+
     fun confirm(msg: String, onYes: () -> Unit) {
         AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setMessage(msg)

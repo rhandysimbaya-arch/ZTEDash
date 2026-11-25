@@ -34,14 +34,24 @@ class MenuActivity : NeonActivity() {
         item(col, "Device Controls", "Performance mode, LED, USB, restart, reset", Neon.LIME) {
             startActivity(Intent(this, DeviceActivity::class.java))
         }
+        item(col, "APN Settings", "Profiles, default APN, automatic mode", Neon.CYAN) {
+            startActivity(Intent(this, ApnActivity::class.java))
+        }
+        item(col, "Wi-Fi Settings", "2.4 GHz and 5 GHz name, password, security", Neon.MAGENTA) {
+            startActivity(Intent(this, WifiActivity::class.java))
+        }
+        item(col, "Connected Devices", "Rename or block devices", Neon.LIME) {
+            startActivity(Intent(this, DevicesActivity::class.java))
+        }
+        item(col, "Data Usage", "Monthly usage, limit, alerts", Neon.CYAN) {
+            startActivity(Intent(this, DataUsageActivity::class.java))
+        }
+        item(col, "SMS", "Read, send and delete messages", Neon.MAGENTA) {
+            startActivity(Intent(this, SmsActivity::class.java))
+        }
 
         col.addView(ui.text("ROUTER PAGES (NEON THEME)", 11f, Neon.DIM).apply { setPadding(0, ui.dp(22), 0, 0) })
         val pages = listOf(
-            Triple("APN Settings", "apn_setting", "Access point names"),
-            Triple("Wi-Fi Settings", "wifi_main_24G", "Name, password, bands"),
-            Triple("Connected Devices", "station_info", "Block / rename devices"),
-            Triple("Data Usage & Alerts", "traffic_alert", "Traffic limits"),
-            Triple("SMS", "smslist", "Inbox and messages"),
             Triple("SMS Settings", "sms_setting", ""),
             Triple("Dial Settings", "dial_setting", "Connection mode"),
             Triple("Network Selection", "net_select", "Manual operator search"),

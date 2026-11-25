@@ -24,5 +24,10 @@
         <activity android:name=".BandActivity" android:exported="false" />
         <activity android:name=".NetModeActivity" android:exported="false" />
         <activity android:name=".DeviceActivity" android:exported="false" />
+        <activity android:name=".ApnActivity" android:exported="false" />
+        <activity android:name=".WifiActivity" android:exported="false" />
+        <activity android:name=".DevicesActivity" android:exported="false" />
+        <activity android:name=".DataUsageActivity" android:exported="false" />
+        <activity android:name=".SmsActivity" android:exported="false" />
     </application>
 </manifest>

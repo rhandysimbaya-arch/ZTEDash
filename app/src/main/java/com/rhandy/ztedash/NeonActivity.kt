@@ -45,6 +45,8 @@ abstract class NeonActivity : Activity() {
         else toast("Failed: " + (r?.toString()?.take(120) ?: "no reply from router (are you logged in?)"))
     }
 
+    fun q(s: String): String = JSONObject.quote(s)
+
     /** Reads a router value that may be a JSON array or a comma separated string. */
     fun list(r: JSONObject?, key: String): List<String> {
         if (r == null) return emptyList()
